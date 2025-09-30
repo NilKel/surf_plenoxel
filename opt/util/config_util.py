@@ -155,3 +155,8 @@ def setup_render_opts(opt, args):
     opt.last_sample_opaque = args.last_sample_opaque
     opt.near_clip = args.near_clip
     opt.use_spheric_clip = args.use_spheric_clip
+    # Surface mode options
+    if hasattr(args, 'normals_mode'):
+        opt.normals_mode = args.normals_mode
+    if hasattr(args, 'negate_normals'):
+        opt.negate_normals = args.negate_normals

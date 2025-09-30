@@ -67,6 +67,10 @@ group.add_argument('--basis_reso', type=int, default=32,
 group.add_argument('--sh_dim', type=int, default=9, help='SH/learned basis dimensions (at most 10)')
 group.add_argument('--use_vector_potential', action='store_true', default=False,
                    help='Use vector potential representation for surface-aware rendering')
+group.add_argument('--normals_mode', choices=['fd', 'autograd'], default='fd',
+                   help='Normal computation: finite-difference (fd) or autograd w.r.t. points')
+group.add_argument('--negate_normals', action='store_true', default=False,
+                   help='Negate normals (flip sign) before dot with vector potential')
 group.add_argument('--mlp_posenc_size', type=int, default=4, help='Positional encoding size if using MLP basis; 0 to disable')
 group.add_argument('--mlp_width', type=int, default=32, help='MLP width if using MLP basis')
 

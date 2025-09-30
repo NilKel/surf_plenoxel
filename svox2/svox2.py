@@ -836,7 +836,9 @@ class SparseGrid(nn.Module):
             if self.use_vector_potential:
                 # Compute surface normal from density gradient at interpolated position in grid coords
                 pos_for_grad = l.float() + pos  # pos already is fractional offset in [0,1)
-                normal = self._compute_density_gradient(pos_for_grad)
+                normals_mode = getattr(self.opt, 'normals_mode', 'fd')
+                negate = getattr(self.opt, 'negate_normals', False)
+                normal = self._compute_normals(pos_for_grad, mode=normals_mode, negate=negate)
                 
                 # Convert vector potential to effective SH coefficients
                 rgb = self._vector_potential_to_sh(rgb, normal)
@@ -1073,7 +1075,9 @@ class SparseGrid(nn.Module):
             if self.use_vector_potential:
                 # Compute surface normal from density gradient at interpolated position in grid coords
                 pos_for_grad = l.float() + pos  # pos already is fractional offset in [0,1)
-                normal = self._compute_density_gradient(pos_for_grad)
+                normals_mode = getattr(self.opt, 'normals_mode', 'fd')
+                negate = getattr(self.opt, 'negate_normals', False)
+                normal = self._compute_normals(pos_for_grad, mode=normals_mode, negate=negate)
                 
                 # Convert vector potential to effective SH coefficients
                 rgb = self._vector_potential_to_sh(rgb, normal)
@@ -2444,3 +2448,17 @@ class SparseGrid(nn.Module):
             raise NotImplementedError("Unsupported initialization", init_type)
         self.basis_data.data[:] = sph_vals.view(
                     basis_reso, basis_reso, basis_reso, n_comps).to(device=self.basis_data.device)
+
+    def _compute_normals(self, pos_for_grad: torch.Tensor, mode: str = 'fd', negate: bool = False):
+        if mode == 'autograd':
+            pos_for_grad = pos_for_grad.detach().requires_grad_(True)
+            sigma, _ = self.sample(pos_for_grad, want_colors=False, grid_coords=True)
+            grad = torch.autograd.grad(
+                outputs=sigma.sum(), inputs=pos_for_grad, create_graph=True
+            )[0]
+            normal = grad / (grad.norm(dim=-1, keepdim=True).clamp_min(1e-8))
+        else:
+            normal = self._compute_density_gradient(pos_for_grad)
+        if negate:
+            normal = -normal
+        return normal
