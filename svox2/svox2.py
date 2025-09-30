@@ -585,7 +585,7 @@ class SparseGrid(nn.Module):
         offset_points = offset_points.reshape(-1, 3)  # (6*N, 3)
         
         # Sample density (only need density, not colors)
-        sigma_samples, _ = self.sample(offset_points, want_colors=False, grid_coords=True)
+        sigma_samples, _ = self.sample(offset_points, want_colors=False, grid_coords=True, use_kernel=False)
         sigma_samples = sigma_samples.reshape(N, 6)  # (N, 6)
         
         # Compute gradients using central differences
@@ -608,7 +608,7 @@ class SparseGrid(nn.Module):
         :param grad: (N, 3) density gradient (unnormalized, with epsilon)
         :return: (N, basis_dim * 3) effective SH coefficients
         """
-        breakpoint()
+        # breakpoint()
         N = sh_vp.shape[0]
         # Reshape: (N, basis_dim * 3 * 3) -> (N, 3, basis_dim, 3)
         # [RGB channels, SH coeffs, vector components]
@@ -2462,7 +2462,7 @@ class SparseGrid(nn.Module):
     def _compute_normals(self, pos_for_grad: torch.Tensor, mode: str = 'fd', negate: bool = False, detach: bool = False):
         if mode == 'autograd':
             pos_for_grad = pos_for_grad.detach().requires_grad_(True)
-            sigma, _ = self.sample(pos_for_grad, want_colors=False, grid_coords=True)
+            sigma, _ = self.sample(pos_for_grad, want_colors=False, grid_coords=True, use_kernel=False)
             grad = torch.autograd.grad(
                 outputs=sigma.sum(), inputs=pos_for_grad, create_graph=True
             )[0]
