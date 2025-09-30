@@ -1639,6 +1639,8 @@ class SparseGrid(nn.Module):
             data['background_links'] = self.background_links.cpu().numpy()
             data['background_data'] = self.background_data.data.cpu().numpy()
         data['basis_type'] = self.basis_type
+        data['basis_dim'] = np.int32(self.basis_dim)
+        data['use_vector_potential'] = np.bool_(self.use_vector_potential)
 
         save_fn(
             path,
@@ -1667,7 +1669,12 @@ class SparseGrid(nn.Module):
             background_data = None
 
         links = z.f.links
-        basis_dim = (sh_data.shape[1]) // 3
+        use_vector_potential = z['use_vector_potential'].item() if 'use_vector_potential' in z else False
+        if 'basis_dim' in z:
+            basis_dim = z['basis_dim'].item()
+        else:
+            # Legacy: infer from sh_data shape (assumes no vector potential)
+            basis_dim = (sh_data.shape[1]) // 3
         radius = z.f.radius.tolist() if "radius" in z.files else [1.0, 1.0, 1.0]
         center = z.f.center.tolist() if "center" in z.files else [0.0, 0.0, 0.0]
         grid = cls(
@@ -1681,6 +1688,7 @@ class SparseGrid(nn.Module):
             mlp_posenc_size=z['mlp_posenc_size'].item() if 'mlp_posenc_size' in z else 0,
             mlp_width=z['mlp_width'].item() if 'mlp_width' in z else 16,
             background_nlayers=0,
+            use_vector_potential=use_vector_potential,
         )
         if sh_data.dtype != np.float32:
             sh_data = sh_data.astype(np.float32)
