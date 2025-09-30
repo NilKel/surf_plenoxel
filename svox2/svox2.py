@@ -367,9 +367,11 @@ class SparseGrid(nn.Module):
         background_nlayers : int = 0,  # BG MSI layers
         background_reso : int = 256,  # BG MSI cubemap face size
         device: Union[torch.device, str] = "cpu",
+        use_vector_potential: bool = False,  # Use vector potential for surface-aware rendering
     ):
         super().__init__()
         self.basis_type = basis_type
+        self.use_vector_potential = use_vector_potential
         if basis_type == BASIS_TYPE_SH:
             assert utils.isqrt(basis_dim) is not None, "basis_dim (SH) must be a square number"
         assert (
@@ -451,9 +453,11 @@ class SparseGrid(nn.Module):
         )
         # Called sh for legacy reasons, but it's just the coeffients for whatever
         # spherical basis functions
+        # If using vector potential, store 3D vector per SH coefficient (basis_dim * 3 * 3)
+        sh_data_width = self.basis_dim * 3 * (3 if self.use_vector_potential else 1)
         self.sh_data = nn.Parameter(
             torch.zeros(
-                self.capacity, self.basis_dim * 3, dtype=torch.float32, device=device
+                self.capacity, sh_data_width, dtype=torch.float32, device=device
             )
         )
 
@@ -557,6 +561,70 @@ class SparseGrid(nn.Module):
     @property
     def shape(self):
         return list(self.links.shape) + [self.data_dim]
+
+    def _compute_density_gradient(self, points: torch.Tensor, eps: float = 0.5):
+        """
+        Compute density gradient at given points using central differences.
+        
+        :param points: (N, 3) points in grid coordinates
+        :param eps: step size for finite differences (in voxel units)
+        :return: (N, 3) normalized gradient (surface normal)
+        """
+        N = points.shape[0]
+        device = points.device
+        
+        # Create offset points for central differences
+        offsets = torch.tensor([
+            [eps, 0, 0], [-eps, 0, 0],  # x+, x-
+            [0, eps, 0], [0, -eps, 0],  # y+, y-
+            [0, 0, eps], [0, 0, -eps],  # z+, z-
+        ], device=device, dtype=torch.float32)
+        
+        # Sample density at offset points: (6*N, 3)
+        offset_points = points.unsqueeze(1) + offsets.unsqueeze(0)  # (N, 6, 3)
+        offset_points = offset_points.reshape(-1, 3)  # (6*N, 3)
+        
+        # Sample density (only need density, not colors)
+        sigma_samples, _ = self.sample(offset_points, want_colors=False, grid_coords=True)
+        sigma_samples = sigma_samples.reshape(N, 6)  # (N, 6)
+        
+        # Compute gradients using central differences
+        grad_x = (sigma_samples[:, 0] - sigma_samples[:, 1]) / (2 * eps)
+        grad_y = (sigma_samples[:, 2] - sigma_samples[:, 3]) / (2 * eps)
+        grad_z = (sigma_samples[:, 4] - sigma_samples[:, 5]) / (2 * eps)
+        
+        grad = torch.stack([grad_x, grad_y, grad_z], dim=-1)  # (N, 3)
+        
+        # Normalize to get surface normal
+        grad_norm = torch.norm(grad, dim=-1, keepdim=True).clamp_min(1e-8)
+        normal = grad / grad_norm
+        
+        return normal
+
+    def _vector_potential_to_sh(self, sh_vp: torch.Tensor, normal: torch.Tensor):
+        """
+        Convert vector potential representation to effective SH coefficients.
+        
+        :param sh_vp: (N, basis_dim * 3 * 3) vector potential for SH coefficients
+        :param normal: (N, 3) surface normal
+        :return: (N, basis_dim * 3) effective SH coefficients
+        """
+        N = sh_vp.shape[0]
+        # Reshape: (N, basis_dim * 3 * 3) -> (N, 3, basis_dim, 3)
+        # [RGB channels, SH coeffs, vector components]
+        sh_vp_reshaped = sh_vp.reshape(N, 3, self.basis_dim, 3)
+        
+        # Dot product with normal: (N, 3, basis_dim, 3) x (N, 3) -> (N, 3, basis_dim)
+        # Expand normal: (N, 3) -> (N, 1, 1, 3)
+        normal_expanded = normal.unsqueeze(1).unsqueeze(1)
+        
+        # Dot product along last dimension
+        sh_eff = (sh_vp_reshaped * normal_expanded).sum(dim=-1)  # (N, 3, basis_dim)
+        
+        # Reshape to (N, 3 * basis_dim)
+        sh_eff = sh_eff.reshape(N, 3 * self.basis_dim)
+        
+        return sh_eff
 
     def _fetch_links(self, links):
         results_sigma = torch.zeros(
@@ -763,6 +831,17 @@ class SparseGrid(nn.Module):
             rgb = c0 * wa[:, :1] + c1 * wb[:, :1]
 
             # END CRAZY TRILERP
+
+            # Vector Potential Processing
+            if self.use_vector_potential:
+                # Compute surface normal from density gradient
+                # pos is in grid coordinates (clamped to valid range)
+                # Need to reconstruct actual position for gradient computation
+                pos_for_grad = l.float() + (wa * 0 + wb * 1.0)  # Reconstruct interpolated position
+                normal = self._compute_density_gradient(pos_for_grad)
+                
+                # Convert vector potential to effective SH coefficients
+                rgb = self._vector_potential_to_sh(rgb, normal)
 
             log_att = (
                 -self.opt.step_size
@@ -991,6 +1070,17 @@ class SparseGrid(nn.Module):
             rgb = c0 * wa[:, :1] + c1 * wb[:, :1]
 
             # END CRAZY TRILERP
+
+            # Vector Potential Processing
+            if self.use_vector_potential:
+                # Compute surface normal from density gradient
+                # pos is in grid coordinates (clamped to valid range)
+                # Need to reconstruct actual position for gradient computation
+                pos_for_grad = l.float() + (wa * 0 + wb * 1.0)  # Reconstruct interpolated position
+                normal = self._compute_density_gradient(pos_for_grad)
+                
+                # Convert vector potential to effective SH coefficients
+                rgb = self._vector_potential_to_sh(rgb, normal)
 
             log_att = (
                 -self.opt.step_size

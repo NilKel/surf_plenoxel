@@ -65,7 +65,8 @@ group.add_argument('--basis_type',
 group.add_argument('--basis_reso', type=int, default=32,
                    help='basis grid resolution (only for learned texture)')
 group.add_argument('--sh_dim', type=int, default=9, help='SH/learned basis dimensions (at most 10)')
-
+group.add_argument('--use_vector_potential', action='store_true', default=False,
+                   help='Use vector potential representation for surface-aware rendering')
 group.add_argument('--mlp_posenc_size', type=int, default=4, help='Positional encoding size if using MLP basis; 0 to disable')
 group.add_argument('--mlp_width', type=int, default=32, help='MLP width if using MLP basis')
 
@@ -294,7 +295,8 @@ grid = svox2.SparseGrid(reso=reso_list[reso_id],
                         mlp_posenc_size=args.mlp_posenc_size,
                         mlp_width=args.mlp_width,
                         background_nlayers=args.background_nlayers,
-                        background_reso=args.background_reso)
+                        background_reso=args.background_reso,
+                        use_vector_potential=args.use_vector_potential)
 
 # DC -> gray; mind the SH scaling!
 grid.sh_data.data[:] = 0.0
