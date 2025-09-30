@@ -49,6 +49,12 @@ parser.add_argument('--fps',
                     default=30,
                     help="FPS of video")
 
+# Frame stride for test/train set rendering
+parser.add_argument('--stride',
+                    type=int,
+                    default=25,
+                    help="Evaluate every Nth frame (default 25) when not using --render_path")
+
 # Camera adjustment
 parser.add_argument('--crop',
                     type=float,
@@ -147,6 +153,8 @@ if not args.no_imsave:
 with torch.no_grad():
     n_images = dset.render_c2w.size(0) if args.render_path else dset.n_images
     img_eval_interval = max(n_images // args.n_eval, 1)
+    if not args.render_path and args.stride is not None and args.stride > 0:
+        img_eval_interval = max(img_eval_interval, args.stride)
     avg_psnr = 0.0
     avg_ssim = 0.0
     avg_lpips = 0.0
