@@ -834,10 +834,8 @@ class SparseGrid(nn.Module):
 
             # Vector Potential Processing
             if self.use_vector_potential:
-                # Compute surface normal from density gradient
-                # pos is in grid coordinates (clamped to valid range)
-                # Need to reconstruct actual position for gradient computation
-                pos_for_grad = l.float() + (wa * 0 + wb * 1.0)  # Reconstruct interpolated position
+                # Compute surface normal from density gradient at interpolated position in grid coords
+                pos_for_grad = l.float() + pos  # pos already is fractional offset in [0,1)
                 normal = self._compute_density_gradient(pos_for_grad)
                 
                 # Convert vector potential to effective SH coefficients
@@ -1073,10 +1071,8 @@ class SparseGrid(nn.Module):
 
             # Vector Potential Processing
             if self.use_vector_potential:
-                # Compute surface normal from density gradient
-                # pos is in grid coordinates (clamped to valid range)
-                # Need to reconstruct actual position for gradient computation
-                pos_for_grad = l.float() + (wa * 0 + wb * 1.0)  # Reconstruct interpolated position
+                # Compute surface normal from density gradient at interpolated position in grid coords
+                pos_for_grad = l.float() + pos  # pos already is fractional offset in [0,1)
                 normal = self._compute_density_gradient(pos_for_grad)
                 
                 # Convert vector potential to effective SH coefficients
@@ -1138,6 +1134,9 @@ class SparseGrid(nn.Module):
         :return: (N, 3), predicted RGB
         """
         if use_kernel and self.links.is_cuda and _C is not None and not return_raylen:
+            if self.use_vector_potential:
+                # Use PyTorch path to allow autograd through normals
+                return self._volume_render_gradcheck_lerp(rays, return_raylen=return_raylen)
             assert rays.is_cuda
             basis_data = self._eval_basis_mlp(rays.dirs) if self.basis_type == BASIS_TYPE_MLP \
                                                          else None

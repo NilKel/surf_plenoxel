@@ -49,6 +49,9 @@ def main():
         cmd += ['-c', args.network]
     if args.n_steps is not None:
         cmd += ['--n_iters', str(args.n_steps)]
+    # Map method to vector potential flag
+    if args.method.lower() == 'surface':
+        cmd += ['--use_vector_potential']
     cmd += args.extra
 
     print('Running training:')
