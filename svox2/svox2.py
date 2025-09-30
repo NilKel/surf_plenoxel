@@ -562,12 +562,12 @@ class SparseGrid(nn.Module):
     def shape(self):
         return list(self.links.shape) + [self.data_dim]
 
-    def _compute_density_gradient(self, points: torch.Tensor, eps: float = 0.5):
+    def _compute_density_gradient(self, points: torch.Tensor, eps: float = 0.25):
         """
         Compute density gradient at given points using central differences.
         
         :param points: (N, 3) points in grid coordinates
-        :param eps: step size for finite differences (in voxel units)
+        :param eps: step size for finite differences (in voxel units, smaller = more accurate)
         :return: (N, 3) normalized gradient (surface normal)
         """
         N = points.shape[0]

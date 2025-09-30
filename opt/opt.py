@@ -304,6 +304,13 @@ grid = svox2.SparseGrid(reso=reso_list[reso_id],
 
 # DC -> gray; mind the SH scaling!
 grid.sh_data.data[:] = 0.0
+if args.use_vector_potential:
+    # For vector potential: initialize with small random values
+    # and set DC component's first vector element to a reasonable value
+    grid.sh_data.data.normal_(0.0, 0.01)
+    # DC term (index 0 for each of RGB): set first vector component to match standard init
+    for c in range(3):
+        grid.sh_data.data[:, c * grid.basis_dim * 3] = 0.0  # x-component of DC
 grid.density_data.data[:] = 0.0 if args.lr_fg_begin_step > 0 else args.init_sigma
 
 if grid.use_background:
