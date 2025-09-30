@@ -36,6 +36,8 @@ def main():
                         help='Flip normal direction before dot product')
     parser.add_argument('--detach_normals', action='store_true', default=False,
                         help='Detach gradients from normals (no backprop to density through normals)')
+    parser.add_argument('--renderer_backend', required=False, type=str, choices=['cuvol','nvol','svox1'], default=None,
+                        help='Renderer backend to pass through (-B/--renderer_backend)')
     parser.add_argument('--extra', nargs=argparse.REMAINDER, default=[],
                         help='Extra flags passed to training')
     args = parser.parse_args()
@@ -64,6 +66,8 @@ def main():
             cmd += ['--negate_normals']
         if args.detach_normals:
             cmd += ['--detach_normals']
+    if args.renderer_backend:
+        cmd += ['-B', args.renderer_backend]
     cmd += args.extra
 
     print('Running training:')
@@ -84,6 +88,8 @@ def main():
     ]
     if args.network:
         render_cmd += ['-c', args.network]
+    if args.renderer_backend:
+        render_cmd += ['-B', args.renderer_backend]
 
     print('Rendering test set:')
     print(' '.join(render_cmd))
