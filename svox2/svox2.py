@@ -568,7 +568,7 @@ class SparseGrid(nn.Module):
         
         :param points: (N, 3) points in grid coordinates
         :param eps: step size for finite differences (in voxel units, smaller = more accurate)
-        :return: (N, 3) normalized gradient (surface normal)
+        :return: (N, 3) raw gradient (unnormalized, with epsilon added)
         """
         N = points.shape[0]
         device = points.device
@@ -595,18 +595,17 @@ class SparseGrid(nn.Module):
         
         grad = torch.stack([grad_x, grad_y, grad_z], dim=-1)  # (N, 3)
         
-        # Normalize to get surface normal
-        grad_norm = torch.norm(grad, dim=-1, keepdim=True).clamp_min(1e-8)
-        normal = grad / grad_norm
+        # Add epsilon to avoid NaNs (no normalization)
+        grad = grad + 1e-8
         
-        return normal
+        return grad
 
-    def _vector_potential_to_sh(self, sh_vp: torch.Tensor, normal: torch.Tensor):
+    def _vector_potential_to_sh(self, sh_vp: torch.Tensor, grad: torch.Tensor):
         """
         Convert vector potential representation to effective SH coefficients.
         
         :param sh_vp: (N, basis_dim * 3 * 3) vector potential for SH coefficients
-        :param normal: (N, 3) surface normal
+        :param grad: (N, 3) density gradient (unnormalized, with epsilon)
         :return: (N, basis_dim * 3) effective SH coefficients
         """
         N = sh_vp.shape[0]
@@ -614,12 +613,12 @@ class SparseGrid(nn.Module):
         # [RGB channels, SH coeffs, vector components]
         sh_vp_reshaped = sh_vp.reshape(N, 3, self.basis_dim, 3)
         
-        # Dot product with normal: (N, 3, basis_dim, 3) x (N, 3) -> (N, 3, basis_dim)
-        # Expand normal: (N, 3) -> (N, 1, 1, 3)
-        normal_expanded = normal.unsqueeze(1).unsqueeze(1)
+        # Dot product with gradient: (N, 3, basis_dim, 3) x (N, 3) -> (N, 3, basis_dim)
+        # Expand gradient: (N, 3) -> (N, 1, 1, 3)
+        grad_expanded = grad.unsqueeze(1).unsqueeze(1)
         
         # Dot product along last dimension
-        sh_eff = (sh_vp_reshaped * normal_expanded).sum(dim=-1)  # (N, 3, basis_dim)
+        sh_eff = (sh_vp_reshaped * grad_expanded).sum(dim=-1)  # (N, 3, basis_dim)
         
         # Reshape to (N, 3 * basis_dim)
         sh_eff = sh_eff.reshape(N, 3 * self.basis_dim)
@@ -834,14 +833,14 @@ class SparseGrid(nn.Module):
 
             # Vector Potential Processing
             if self.use_vector_potential:
-                # Compute surface normal from density gradient at interpolated position in grid coords
+                # Compute density gradient at interpolated position in grid coords (unnormalized)
                 pos_for_grad = l.float() + pos  # pos already is fractional offset in [0,1)
                 normals_mode = getattr(self.opt, 'normals_mode', 'fd')
                 negate = getattr(self.opt, 'negate_normals', False)
-                normal = self._compute_normals(pos_for_grad, mode=normals_mode, negate=negate)
+                grad = self._compute_normals(pos_for_grad, mode=normals_mode, negate=negate)
                 
-                # Convert vector potential to effective SH coefficients
-                rgb = self._vector_potential_to_sh(rgb, normal)
+                # Convert vector potential to effective SH coefficients via dot product
+                rgb = self._vector_potential_to_sh(rgb, grad)
 
             log_att = (
                 -self.opt.step_size
@@ -1073,14 +1072,14 @@ class SparseGrid(nn.Module):
 
             # Vector Potential Processing
             if self.use_vector_potential:
-                # Compute surface normal from density gradient at interpolated position in grid coords
+                # Compute density gradient at interpolated position in grid coords (unnormalized)
                 pos_for_grad = l.float() + pos  # pos already is fractional offset in [0,1)
                 normals_mode = getattr(self.opt, 'normals_mode', 'fd')
                 negate = getattr(self.opt, 'negate_normals', False)
-                normal = self._compute_normals(pos_for_grad, mode=normals_mode, negate=negate)
+                grad = self._compute_normals(pos_for_grad, mode=normals_mode, negate=negate)
                 
-                # Convert vector potential to effective SH coefficients
-                rgb = self._vector_potential_to_sh(rgb, normal)
+                # Convert vector potential to effective SH coefficients via dot product
+                rgb = self._vector_potential_to_sh(rgb, grad)
 
             log_att = (
                 -self.opt.step_size
@@ -2464,9 +2463,10 @@ class SparseGrid(nn.Module):
             grad = torch.autograd.grad(
                 outputs=sigma.sum(), inputs=pos_for_grad, create_graph=True
             )[0]
-            normal = grad / (grad.norm(dim=-1, keepdim=True).clamp_min(1e-8))
+            # Add epsilon to avoid NaNs (no normalization)
+            grad = grad + 1e-8
         else:
-            normal = self._compute_density_gradient(pos_for_grad)
+            grad = self._compute_density_gradient(pos_for_grad)
         if negate:
-            normal = -normal
-        return normal
+            grad = -grad
+        return grad
