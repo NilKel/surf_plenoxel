@@ -70,7 +70,9 @@ group.add_argument('--use_vector_potential', action='store_true', default=False,
 group.add_argument('--normals_mode', choices=['fd', 'autograd'], default='fd',
                    help='Normal computation: finite-difference (fd) or autograd w.r.t. points')
 group.add_argument('--negate_normals', action='store_true', default=False,
-                   help='Negate normals (flip sign) before dot with vector potential')
+                   help='Flip normal direction before dot product')
+group.add_argument('--detach_normals', action='store_true', default=False,
+                   help='Detach gradients from normals (no gradient flow to density through normals)')
 group.add_argument('--mlp_posenc_size', type=int, default=4, help='Positional encoding size if using MLP basis; 0 to disable')
 group.add_argument('--mlp_width', type=int, default=32, help='MLP width if using MLP basis')
 

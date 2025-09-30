@@ -160,3 +160,5 @@ def setup_render_opts(opt, args):
         opt.normals_mode = args.normals_mode
     if hasattr(args, 'negate_normals'):
         opt.negate_normals = args.negate_normals
+    if hasattr(args, 'detach_normals'):
+        opt.detach_normals = args.detach_normals

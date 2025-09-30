@@ -837,7 +837,8 @@ class SparseGrid(nn.Module):
                 pos_for_grad = l.float() + pos  # pos already is fractional offset in [0,1)
                 normals_mode = getattr(self.opt, 'normals_mode', 'fd')
                 negate = getattr(self.opt, 'negate_normals', False)
-                grad = self._compute_normals(pos_for_grad, mode=normals_mode, negate=negate)
+                detach = getattr(self.opt, 'detach_normals', False)
+                grad = self._compute_normals(pos_for_grad, mode=normals_mode, negate=negate, detach=detach)
                 
                 # Convert vector potential to effective SH coefficients via dot product
                 rgb = self._vector_potential_to_sh(rgb, grad)
@@ -1076,7 +1077,8 @@ class SparseGrid(nn.Module):
                 pos_for_grad = l.float() + pos  # pos already is fractional offset in [0,1)
                 normals_mode = getattr(self.opt, 'normals_mode', 'fd')
                 negate = getattr(self.opt, 'negate_normals', False)
-                grad = self._compute_normals(pos_for_grad, mode=normals_mode, negate=negate)
+                detach = getattr(self.opt, 'detach_normals', False)
+                grad = self._compute_normals(pos_for_grad, mode=normals_mode, negate=negate, detach=detach)
                 
                 # Convert vector potential to effective SH coefficients via dot product
                 rgb = self._vector_potential_to_sh(rgb, grad)
@@ -2456,7 +2458,7 @@ class SparseGrid(nn.Module):
         self.basis_data.data[:] = sph_vals.view(
                     basis_reso, basis_reso, basis_reso, n_comps).to(device=self.basis_data.device)
 
-    def _compute_normals(self, pos_for_grad: torch.Tensor, mode: str = 'fd', negate: bool = False):
+    def _compute_normals(self, pos_for_grad: torch.Tensor, mode: str = 'fd', negate: bool = False, detach: bool = False):
         if mode == 'autograd':
             pos_for_grad = pos_for_grad.detach().requires_grad_(True)
             sigma, _ = self.sample(pos_for_grad, want_colors=False, grid_coords=True)
@@ -2469,4 +2471,6 @@ class SparseGrid(nn.Module):
             grad = self._compute_density_gradient(pos_for_grad)
         if negate:
             grad = -grad
+        if detach:
+            grad = grad.detach()
         return grad

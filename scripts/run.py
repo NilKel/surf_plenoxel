@@ -34,6 +34,8 @@ def main():
                         help='Surface normals mode to pass to training (fd or autograd)')
     parser.add_argument('--negate_normals', action='store_true', default=False,
                         help='Flip normal direction before dot product')
+    parser.add_argument('--detach_normals', action='store_true', default=False,
+                        help='Detach gradients from normals (no backprop to density through normals)')
     parser.add_argument('--extra', nargs=argparse.REMAINDER, default=[],
                         help='Extra flags passed to training')
     args = parser.parse_args()
@@ -60,6 +62,8 @@ def main():
             cmd += ['--normals_mode', args.normals_mode]
         if args.negate_normals:
             cmd += ['--negate_normals']
+        if args.detach_normals:
+            cmd += ['--detach_normals']
     cmd += args.extra
 
     print('Running training:')
